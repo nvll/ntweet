@@ -1,0 +1,3 @@
+This is an ncurses based twitter reader I wrote back in 2008. The code was never polished, probably
+leaks memory and does not work with modern twitter apis. I've cleaned up the code a bit to make it
+more presentable but nothing more.

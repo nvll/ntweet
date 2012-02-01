@@ -3,8 +3,8 @@
 #include <string.h>
 #include <glib.h>
 #include <unistd.h>
-#include "curl/curl.h"
-#include "curl/types.h"
+#include <curl/curl.h>
+#include <curl/types.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 #include <pthread.h>
@@ -12,37 +12,42 @@
 #include <signal.h>
 #include <time.h>
 
-#include "global.h"
+#include "ntweet.h"
 #include "xml_parser.h"
 #include "twitter_api.h"
 #include "ui.h"
 
+GSList *tweet_list = NULL;
+screen_t screen = {100, 50, 0, NULL};
+WINDOW *ui, *mainw;
+
+
 void resize_callback(int signal) {
     endwin();
     refresh();
-    getmaxyx(stdscr, screen_y, screen_x);
-    //drawList();
+    getmaxyx(stdscr, screen.y, screen.x);
+    draw_list(tweet_list, &screen);
 }
 
 /* Primary child thread work is done here. Mainly reading from twitter and
  * turning it into a GSList for the main thread */ 
-void child_worker (void *ptr, size_t size, size_t nmemb, void *config) {
+void child_worker () {
     time_t cur_time;
     char *xml_feed = NULL;
-    cHandle = curl_easy_init();
-    int x = 0;
-    while (1) {
-        xml_feed = get_twitter_updates();
+    CURL *curl_handle = curl_easy_init();
+    
+	while (1) {
+        xml_feed = get_twitter_updates(curl_handle, tweet_list);
         if (!xml_feed) { 
-            statusMsg = "Couldn't connect to server";
+            screen.status = "Couldn't connect to server";
             goto csleep;
         }
         time(&cur_time);
-        statusMsg = g_strconcat("Last update ", ctime(&cur_time), NULL);
+        screen.status = g_strconcat("Last update ", ctime(&cur_time), NULL);
 
-        xml_parse_twitter(xml_feed);
+        xml_parse_twitter(xml_feed, tweet_list);
 csleep:
-        drawList(selected);
+        draw_list(tweet_list, &screen);
         sleep(60);
     }
 }
@@ -51,19 +56,17 @@ int main (int argc, char *argv[]) {
     pthread_t child;
     int rc;
 
-    Debug("Setting up signals\n");
-
-    Debug("Initializing libraries / etc\n");
+    DEBUGF("Initializing libraries / etc\n");
     LIBXML_TEST_VERSION;
-    cHandle = curl_easy_init();
-    initscr();
-    getmaxyx(stdscr, screen_y, screen_x);
+    
+	initscr();
+    getmaxyx(stdscr, screen.y, screen.x);
     noecho();
     curs_set(0);
-    Debug("Window dimensions: %i x %i\n", screen_x, screen_y);
+    DEBUGF("window dimensions: %i x %i\n", screen.x, screen.y);
     keypad(stdscr, 1);
 
-    Debug("Spawning child\n");
+    DEBUGF("spawning child\n");
     rc = pthread_create(&child, NULL, (void *) child_worker, NULL);
     if (rc) {
         printf("Failed to spawn a thread\n");
